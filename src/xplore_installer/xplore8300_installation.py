@@ -109,9 +109,9 @@ class Xplore8300Installation(BaseInstallation):
         """
         try:
             logmethod(stdout.decode(errors='replace'))
-        except Exception as e:  # pylint: disable=broad-except
+        except Exception as e:  # pragma: no cover - logging failure
             logger.warning(f'Could not log stdout. Exception: {e}')
         try:
             logmethod(stderr.decode(errors='replace'))
-        except Exception as e:  # pylint: disable=broad-except
+        except Exception as e:  # pragma: no cover - logging failure
             logger.warning(f'Could not log stderr. Exception: {e}')
