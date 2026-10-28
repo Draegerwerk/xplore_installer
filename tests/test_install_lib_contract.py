@@ -139,7 +139,6 @@ def test_load_file_rejects_unsupported_extension(
         installer_library.load_file(str(unsupported_file))
 
 
-@pytest.mark.xfail(strict=True, reason="Product ID is not checked.")
 def test_load_file_rejects_other_product(installer_library, installation_file: Path) -> None:
     from install_interface.installer_exceptions import NotApplicable
 
@@ -218,7 +217,6 @@ def test_get_target_information_rejects_unsupported_connection(
     target_connector.factory.assert_not_called()
 
 
-@pytest.mark.xfail(strict=True, reason="Device ID is not checked.")
 def test_get_target_information_rejects_other_device(installer_library, target_connector) -> None:
     from install_interface.installer_exceptions import NotApplicable
 

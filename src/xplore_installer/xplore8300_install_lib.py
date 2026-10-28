@@ -69,16 +69,20 @@ class Xplore8300InstallLib(BaseInstallerInterface):
     def load_file(self, path: str) -> InstallationFileData:
         """Load an installation file.
 
-        Raise NotApplicable for unsupported file extensions.
+        Raise NotApplicable for unsupported file extensions or products.
         Raise LoadFileError for file read and format errors.
         """
         if os.path.splitext(path)[1] != LIBRARY_FILE_EXTENSION:
             raise NotApplicable(f'File "{path}" is not an Xplore8300 installation file.')
 
         try:
-            return self._read_installation_file(path)
+            file_data = self._read_installation_file(path)
         except Exception as error:
             raise LoadFileError(f'Cannot load installation file "{path}".') from error
+
+        if file_data.device_type != XPLORE8300_DEVICE_TYPE_BIN:
+            raise NotApplicable(f"Installation file is for device type {file_data.device_type}.")
+        return file_data
 
     def _read_installation_file(self, path: str) -> InstallationFileData:
         installation_package = package_parser.load_install_package(path)
@@ -106,18 +110,22 @@ class Xplore8300InstallLib(BaseInstallerInterface):
     def get_target_information(self, connection_information: str) -> TargetInformationData:
         """Load device information.
 
-        Raise NotApplicable for unsupported ports.
+        Raise NotApplicable for unsupported ports or device types.
         Raise LoadDeviceInformationError for connection and read errors.
         """
         if not connection_information.startswith("COM"):
             raise NotApplicable("Not a COM port.")
 
         try:
-            return self._read_target_information(connection_information)
+            target_data = self._read_target_information(connection_information)
         except Exception as error:
             raise LoadDeviceInformationError(
                 f"Cannot load device information on {connection_information}."
             ) from error
+
+        if target_data.device_type != XPLORE8300_DEVICE_TYPE_BIN:
+            raise NotApplicable(f"Device type {target_data.device_type} is not supported.")
+        return target_data
 
     def _read_target_information(self, connection_information: str) -> TargetInformationData:
         bootloader = STM32Bootloader(connection_information).probe()
