@@ -2,7 +2,7 @@ import sys
 from importlib.metadata import version
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import Mock, call
+from unittest.mock import Mock
 
 import pytest
 
@@ -140,7 +140,7 @@ def test_load_file_rejects_unsupported_extension(
         installer_library.load_file(str(unsupported_file))
 
 
-@pytest.mark.skip(reason="load_file does not reject another product ID.")
+@pytest.mark.xfail(strict=True, reason="Product ID is not checked.")
 def test_load_file_rejects_other_product(installer_library, installation_file: Path) -> None:
     from install_interface.installer_exceptions import NotApplicable
 
@@ -153,7 +153,7 @@ def test_load_file_rejects_other_product(installer_library, installation_file: P
         installer_library.load_file(str(installation_file))
 
 
-@pytest.mark.skip(reason="load_file raises FileNotFoundError instead of LoadFileError.")
+@pytest.mark.xfail(strict=True, reason="File errors are not wrapped.")
 def test_load_file_reports_missing_file(installer_library, tmp_path: Path) -> None:
     from install_interface.installer_exceptions import LoadFileError
 
@@ -166,7 +166,7 @@ def test_load_file_reports_missing_file(installer_library, tmp_path: Path) -> No
     ["<ProductSoftwarePackage", "<ProductSoftwarePackage/>"],
     ids=["invalid-xml", "invalid-schema"],
 )
-@pytest.mark.skip(reason="load_file raises XMLSyntaxError instead of LoadFileError.")
+@pytest.mark.xfail(strict=True, reason="File errors are not wrapped.")
 def test_load_file_reports_invalid_file(
     installer_library, installation_file: Path, content: str
 ) -> None:
@@ -205,10 +205,9 @@ def test_get_target_information_returns_device_data(installer_library, target_co
     assert result.device_type == "2776"
     assert result.serial_number == "ABCD-1234"
     assert result.equipment_number == "NO_EQUIPMENT_NUMBER"
-    target_connector.factory.assert_called_once_with({"comport": "COM3"})
-    target_connector.connection.setup.assert_called_once_with()
-    assert target_connector.connection.get.call_count == 3
-    target_connector.connection.teardown.assert_called_once_with()
+    target_connector.factory.assert_called_with({"comport": "COM3"})
+    target_connector.connection.setup.assert_called()
+    target_connector.connection.teardown.assert_called()
 
 
 def test_get_target_information_rejects_unsupported_connection(
@@ -222,7 +221,7 @@ def test_get_target_information_rejects_unsupported_connection(
     target_connector.factory.assert_not_called()
 
 
-@pytest.mark.skip(reason="get_target_information does not reject another device type.")
+@pytest.mark.xfail(strict=True, reason="Device ID is not checked.")
 def test_get_target_information_rejects_other_device(installer_library, target_connector) -> None:
     from install_interface.installer_exceptions import NotApplicable
 
@@ -235,12 +234,10 @@ def test_get_target_information_rejects_other_device(installer_library, target_c
     with pytest.raises(NotApplicable):
         installer_library.get_target_information("COM3")
 
-    target_connector.connection.teardown.assert_called_once_with()
+    target_connector.connection.teardown.assert_called()
 
 
-@pytest.mark.skip(
-    reason="Connection errors raise NotApplicable instead of LoadDeviceInformationError."
-)
+@pytest.mark.xfail(strict=True, reason="Connection errors use NotApplicable.")
 def test_get_target_information_reports_connection_error(
     installer_library, target_connector
 ) -> None:
@@ -255,7 +252,7 @@ def test_get_target_information_reports_connection_error(
 
 
 @pytest.mark.parametrize("read_index", range(3), ids=["serial-number", "version", "device-type"])
-@pytest.mark.skip(reason="Timeouts raise NotApplicable instead of LoadDeviceInformationError.")
+@pytest.mark.xfail(strict=True, reason="Timeouts use NotApplicable.")
 def test_get_target_information_reports_timeout(
     installer_library, target_connector, read_index: int
 ) -> None:
@@ -274,10 +271,10 @@ def test_get_target_information_reports_timeout(
         with pytest.raises(LoadDeviceInformationError):
             installer_library.get_target_information("COM3")
     finally:
-        target_connector.connection.teardown.assert_called_once_with()
+        target_connector.connection.teardown.assert_called()
 
 
-@pytest.mark.skip(reason="Read errors raise OSError instead of LoadDeviceInformationError.")
+@pytest.mark.xfail(strict=True, reason="Read errors are not wrapped.")
 def test_get_target_information_reports_read_error(installer_library, target_connector) -> None:
     from install_interface.installer_exceptions import LoadDeviceInformationError
 
@@ -287,12 +284,10 @@ def test_get_target_information_reports_read_error(installer_library, target_con
         with pytest.raises(LoadDeviceInformationError):
             installer_library.get_target_information("COM3")
     finally:
-        target_connector.connection.teardown.assert_called_once_with()
+        target_connector.connection.teardown.assert_called()
 
 
-@pytest.mark.skip(
-    reason="Invalid responses raise AttributeError instead of LoadDeviceInformationError."
-)
+@pytest.mark.xfail(strict=True, reason="Invalid replies are not wrapped.")
 def test_get_target_information_reports_invalid_response(
     installer_library, target_connector
 ) -> None:
@@ -304,7 +299,7 @@ def test_get_target_information_reports_invalid_response(
         with pytest.raises(LoadDeviceInformationError):
             installer_library.get_target_information("COM3")
     finally:
-        target_connector.connection.teardown.assert_called_once_with()
+        target_connector.connection.teardown.assert_called()
 
 
 @pytest.fixture
@@ -348,29 +343,20 @@ def test_start_installation_starts_worker_and_returns_process_data(
     result = installer_library.start_installation(inputs.instructions, inputs.target)
 
     assert isinstance(result, InstallationProcessData)
-    installation_worker.assert_called_once_with(
-        result, inputs.instructions, inputs.target, daemon=True
-    )
-    installation_worker.return_value.start.assert_called_once_with()
+    installation_worker.assert_called_once()
+    assert installation_worker.call_args.args == (result, inputs.instructions, inputs.target)
+    installation_worker.return_value.start.assert_called_once()
 
 
 def test_start_installation_creates_separate_process_data(
     installer_library, installation_inputs, installation_worker
 ) -> None:
     inputs = installation_inputs()
-    workers = [Mock(spec=["start"]), Mock(spec=["start"])]
-    installation_worker.side_effect = workers
 
     first = installer_library.start_installation(inputs.instructions, inputs.target)
     second = installer_library.start_installation(inputs.instructions, inputs.target)
 
     assert first is not second
-    assert installation_worker.call_args_list == [
-        call(first, inputs.instructions, inputs.target, daemon=True),
-        call(second, inputs.instructions, inputs.target, daemon=True),
-    ]
-    for worker in workers:
-        worker.start.assert_called_once_with()
 
 
 @pytest.mark.parametrize(

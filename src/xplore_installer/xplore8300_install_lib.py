@@ -1,27 +1,37 @@
 import asyncio
 import logging
 import os
-import pathlib
 from typing import List
 
-import xplore_installer
-from xplore_installer.xplore8300_installation import Xplore8300Installation
-from xplore_installer.xplore8300_installer_constants import SW_VERSION_ADDRESS, SW_VERSION_KEY_MAJOR, SW_VERSION_KEY_MINOR, \
-    SW_VERSION_KEY_PATCH, SERIAL_NUMBER_ADDRESS, SERIAL_NUMBER_KEY, LIBRARY_FILE_EXTENSION, \
-    XPLORE8300_DEVICE_TYPE_BIN, \
-    DEVICE_BIN_ADDRESS, DEVICE_BIN_KEY, SW_VERSION_KEY
 from aoneconnector.aone_connector import AlcotestOneConnectorSerial, force_single_event_loop
-# from connector_interface.service_interface_connector_interface import CertificateData
-from customcertstore import definitions as cert_store_definitions
-from customcertstore.certificate_store import CertificateStore
 from install_interface.data.installation_file_data import InstallationFileData
 from install_interface.data.installation_instruction_data import InstallationInstructionData
 from install_interface.data.installation_process_data import InstallationProcessData
 from install_interface.data.target_information_data import TargetInformationData
 from install_interface.installer_exceptions import NotApplicable
-from install_interface.interface.base_installer_interface import BaseInstallerInterface, \
-    ensure_correct_library_decorator
-from install_interface.normalized_installation_package import package_parser, package_constants
+from install_interface.interface.base_installer_interface import (
+    BaseInstallerInterface,
+    ensure_correct_library_decorator,
+)
+from install_interface.normalized_installation_package import package_constants, package_parser
+
+import xplore_installer
+from xplore_installer.stm32_bootloader import STM32Bootloader
+from xplore_installer.xplore8300_installation import Xplore8300Installation
+from xplore_installer.xplore8300_installer_constants import (
+    BOOTLOADER_SERIAL_UNKNOWN,
+    BOOTLOADER_SW_VERSION,
+    DEVICE_BIN_ADDRESS,
+    DEVICE_BIN_KEY,
+    LIBRARY_FILE_EXTENSION,
+    SERIAL_NUMBER_ADDRESS,
+    SERIAL_NUMBER_KEY,
+    SW_VERSION_ADDRESS,
+    SW_VERSION_KEY,
+    XPLORE8300_BOOTLOADER_PRODUCT_ID,
+    XPLORE8300_BOOTLOADER_VERSION,
+    XPLORE8300_DEVICE_TYPE_BIN,
+)
 
 logger = logging.getLogger(f'{xplore_installer.library_name}.Xplore8300InstallLib')
 
@@ -104,6 +114,30 @@ class Xplore8300InstallLib(BaseInstallerInterface):
         """
         if not connection_information.startswith('COM'):
             raise NotApplicable('Not a COM Port')
+
+        bootloader = STM32Bootloader(connection_information).probe()
+        if bootloader is not None:
+            bootloader_version, product_id = bootloader
+            if (
+                product_id == XPLORE8300_BOOTLOADER_PRODUCT_ID
+                and bootloader_version == XPLORE8300_BOOTLOADER_VERSION
+            ):
+                logger.info("Device on %s is in bootloader mode.", connection_information)
+                return TargetInformationData(
+                    connection_information,
+                    type(self).__name__,
+                    BOOTLOADER_SW_VERSION,
+                    XPLORE8300_DEVICE_TYPE_BIN,
+                    BOOTLOADER_SERIAL_UNKNOWN,
+                    "NO_EQUIPMENT_NUMBER",
+                )
+            logger.debug(
+                "Bootloader on %s does not match X-plore 8300: chip %s, version %s.",
+                connection_information,
+                product_id,
+                bootloader_version,
+            )
+
         xplore_connector = AlcotestOneConnectorSerial({"comport": connection_information})
         try:
             xplore_connector.setup()
