@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "xplore-installer"
-version = "0.1.0"
+version = "0.2.0"
 description = "Installation support for Dräger X-plore 8300 in Service Connect"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -38,7 +38,8 @@ core-metadata-version = "2.4"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "--strict-config --strict-markers --import-mode=importlib --cov --cov-branch --cov-report=term-missing --cov-report=xml --cov-fail-under=100"
+pythonpath = ["."]
+addopts = "-p no:cacheprovider --strict-config --strict-markers --import-mode=importlib --cov --cov-branch --cov-report=term-missing --cov-report=xml --cov-fail-under=100"
 
 [tool.coverage.run]
 source = ["xplore_installer", "scripts"]

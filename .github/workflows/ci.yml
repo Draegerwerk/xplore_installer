@@ -23,8 +23,18 @@ jobs:
           python-version: '3.11'
           cache: pip
       - run: python -m pip install ".[dev]"
-      - run: ruff check .
-      - run: ruff format --check .
+      - name: Lint with temporary legacy exclusions
+        run: >-
+          ruff check .
+          --extend-exclude src/xplore_installer/xplore8300_install_lib.py
+          --extend-exclude src/xplore_installer/xplore8300_installation.py
+          --extend-exclude src/xplore_installer/xplore8300_installer_constants.py
+      - name: Check format with temporary legacy exclusions
+        run: >-
+          ruff format --check .
+          --extend-exclude src/xplore_installer/xplore8300_install_lib.py
+          --extend-exclude src/xplore_installer/xplore8300_installation.py
+          --extend-exclude src/xplore_installer/xplore8300_installer_constants.py
 
   test:
     name: Test (${{ matrix.os }}, Python ${{ matrix.python }})

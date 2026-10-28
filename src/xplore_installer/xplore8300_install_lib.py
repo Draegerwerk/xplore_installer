@@ -1,0 +1,156 @@
+import asyncio
+import logging
+import os
+import pathlib
+from typing import List
+
+import xplore_installer
+from xplore_installer.xplore8300_installation import Xplore8300Installation
+from xplore_installer.xplore8300_installer_constants import SW_VERSION_ADDRESS, SW_VERSION_KEY_MAJOR, SW_VERSION_KEY_MINOR, \
+    SW_VERSION_KEY_PATCH, SERIAL_NUMBER_ADDRESS, SERIAL_NUMBER_KEY, LIBRARY_FILE_EXTENSION, \
+    XPLORE8300_DEVICE_TYPE_BIN, \
+    DEVICE_BIN_ADDRESS, DEVICE_BIN_KEY, SW_VERSION_KEY
+from aoneconnector.aone_connector import AlcotestOneConnectorSerial, force_single_event_loop
+# from connector_interface.service_interface_connector_interface import CertificateData
+from customcertstore import definitions as cert_store_definitions
+from customcertstore.certificate_store import CertificateStore
+from install_interface.data.installation_file_data import InstallationFileData
+from install_interface.data.installation_instruction_data import InstallationInstructionData
+from install_interface.data.installation_process_data import InstallationProcessData
+from install_interface.data.target_information_data import TargetInformationData
+from install_interface.installer_exceptions import NotApplicable
+from install_interface.interface.base_installer_interface import BaseInstallerInterface, \
+    ensure_correct_library_decorator
+from install_interface.normalized_installation_package import package_parser, package_constants
+
+logger = logging.getLogger(f'{xplore_installer.library_name}.Xplore8300InstallLib')
+
+
+# def _read_cert_data()->CertificateData:
+#     cert_store = CertificateStore(cert_store_definitions.PURPOSES.STANDARD_TECHNICIAN_DEVICE_CERTIFICATE)
+#     pub, priv, pw = cert_store.get()
+#     return CertificateData(pathlib.Path(pub).read_text(encoding="utf8"), pathlib.Path(priv).read_text(encoding="utf8"), pw)
+
+
+class Xplore8300InstallLib(BaseInstallerInterface):
+    """
+    Xplore8300 installer interface.
+
+    Available configurations:
+
+    - full: full update -> firmware and system files with files check
+    - full-no-check: firmware and file without files check
+    - firmware: only firmware
+    - files: only system files with files check
+    - files-no-check: only system files without files check
+    """
+
+    def __init__(self):
+        logger.info("start Xplore8300 install interface")
+        force_single_event_loop()
+
+    @property
+    def firmware_file_extensions(self) -> List[str]:
+        return [LIBRARY_FILE_EXTENSION]
+
+    def load_file(self, path: str) -> InstallationFileData:
+        """
+        Load installation file.
+
+        Args:
+            path (str): path to installation file with file name.
+
+        Raises:
+            LoadFileError: file does not exist or file is not a valid zip file
+            NotApplicable: file dose not contain Xplore8300 update file or file extension is not valid
+
+        Returns:
+            InstallationFileData: file data required for the installation
+        """
+        if not os.path.splitext(path)[1] == LIBRARY_FILE_EXTENSION:
+            raise NotApplicable(f'File "{path}" is not an Xplore8300 installation file.')
+
+        installation_package = package_parser.load_install_package(path)
+        version = installation_package.get(package_constants.ROOT_ATTRIBUTE_PRODUCT_VERSION)
+        device_type = installation_package.get(package_constants.ROOT_ATTRIBUTE_PRODUCT_ID)
+
+        configurationElements = installation_package.xpath(package_constants.XML_CONFIGURATION_PATH)
+        configurations = [configelement.get(package_constants.CONFIGURATION_ATTRIBUTE_NAME) for configelement in configurationElements]
+
+        package_name = installation_package.get(package_constants.ROOT_ATTRIBUTE_INSTALLATION_NAME)
+
+        file_data = InstallationFileData(package_name,
+                                         Xplore8300InstallLib.__name__,
+                                         version,
+                                         path,
+                                         configurations,
+                                         device_type,
+                                         installation_package)
+        return file_data
+
+    def get_target_information(self, connection_information: str):
+        """
+        Connect to Xplore8300 device and get the device information.
+
+        Args:
+            connection_information (str): serial com port (e.g. "COM3")
+
+        Raises:
+            Exception: connection to the device cannot be established
+                       or wrong response data
+
+        Returns:
+            TargetInformationData: required target information data
+        """
+        if not connection_information.startswith('COM'):
+            raise NotApplicable('Not a COM Port')
+        xplore_connector = AlcotestOneConnectorSerial({"comport": connection_information})
+        try:
+            xplore_connector.setup()
+        except Exception as exc:
+            raise NotApplicable('Cannot connect to the device.') from exc
+
+        try:
+            # read serial number
+            serial_number = xplore_connector.get(SERIAL_NUMBER_ADDRESS, coap_timeout=1.0).get(SERIAL_NUMBER_KEY, "---")
+            # read device software version
+            software_version = xplore_connector.get(SW_VERSION_ADDRESS, coap_timeout=1.0).get(SW_VERSION_KEY, "---")
+            # read device id
+            device_type_bin = xplore_connector.get(DEVICE_BIN_ADDRESS, coap_timeout=1.0).get(DEVICE_BIN_KEY, "---")
+        except asyncio.TimeoutError as e:
+            raise NotApplicable("No valid information") from e
+        finally:
+            xplore_connector.teardown()
+
+        logger.info(f"Found device with serial number: {serial_number} and software version: {software_version}")
+
+
+        target_definition = TargetInformationData(connection_information,
+                                                  Xplore8300InstallLib.__name__,
+                                                  software_version,
+                                                  str(device_type_bin),
+                                                  serial_number,
+                                                  'NO_EQUIPMENT_NUMBER')
+        return target_definition
+
+    @ensure_correct_library_decorator
+    def start_installation(self, install_data: InstallationInstructionData,
+                           target_data: TargetInformationData) -> InstallationProcessData:
+        """
+        Start Xplore8300 update process.
+
+        Args:
+            install_data: required installation instruction data
+            target_data: required target information data
+
+        Returns:
+            InstallationProcessData: process data
+
+        """
+        install_process = InstallationProcessData()
+        Xplore8300Installation(install_process, install_data, target_data, daemon=True).start()
+        return install_process
+
+    @staticmethod
+    def _get_library_identification():
+        return f"{xplore_installer.library_name} {xplore_installer.__version__}"
