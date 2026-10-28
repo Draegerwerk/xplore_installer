@@ -15,11 +15,11 @@ jobs:
   validate:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.11'
       - name: Check tag version and commit on main
@@ -35,10 +35,10 @@ jobs:
     needs: [validate, checks]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.11'
       - run: python -m pip install ".[dev]"
@@ -46,7 +46,7 @@ jobs:
       - run: python -m twine check --strict dist/*
       - run: python -m pip install --force-reinstall --no-deps dist/*.whl
       - run: python -m pytest
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: release-distributions
           path: dist/
@@ -61,7 +61,7 @@ jobs:
     permissions:
       id-token: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: release-distributions
           path: dist/
