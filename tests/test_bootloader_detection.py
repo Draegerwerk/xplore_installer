@@ -104,7 +104,7 @@ def real_bootloader(installer_library, monkeypatch: pytest.MonkeyPatch):
 def test_get_target_information_closes_serial_probe_before_coap(
     installer_library, target_connector, serial_port, real_bootloader
 ) -> None:
-    serial_port.port.read.side_effect = [b""]
+    serial_port.port.read.side_effect = [b"", b""]
 
     def create_connector(connection_information):
         serial_port.connection.__exit__.assert_called()

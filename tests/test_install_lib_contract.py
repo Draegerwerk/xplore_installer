@@ -65,7 +65,6 @@ def installer_library(monkeypatch: pytest.MonkeyPatch):
         "customcertstore": Mock(),
         "customcertstore.definitions": Mock(),
         "customcertstore.certificate_store": Mock(),
-        "pkg_resources": SimpleNamespace(resource_filename=Mock(return_value="flasher.exe")),
     }
     for name, dependency in dependencies.items():
         monkeypatch.setitem(sys.modules, name, dependency)

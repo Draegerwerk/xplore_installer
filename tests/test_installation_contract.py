@@ -1,4 +1,3 @@
-import subprocess
 import sys
 from types import SimpleNamespace
 from unittest.mock import ANY, Mock, call
@@ -25,7 +24,6 @@ def installation(monkeypatch: pytest.MonkeyPatch):
         "install_interface.tools.progress_updater": Mock(ProgressStepUpdater=Mock()),
         "aoneconnector": Mock(),
         "aoneconnector.aone_connector": Mock(),
-        "pkg_resources": SimpleNamespace(resource_filename=Mock(return_value="flasher.exe")),
     }
     for name, dependency in dependencies.items():
         monkeypatch.setitem(sys.modules, name, dependency)
@@ -43,8 +41,8 @@ def test_setup_does_not_raise(installation) -> None:
     installation._setup()
 
 
-@pytest.mark.xfail(strict=True, raises=AttributeError, reason="Firmware state is not initialized.")
 def test_setup_initializes_firmware_state(installation) -> None:
+    installation._firmware_started = True
     installation._setup()
 
     assert installation._firmware_started is False
@@ -90,12 +88,19 @@ def test_install_steps_success(
     progress_updater.return_value.finish.assert_called()
 
 
+@pytest.mark.parametrize("cancel_before", [True, False], ids=["before-download", "after-download"])
 def test_install_steps_cancellation(
-    installation, installation_steps, progress_updater, monkeypatch: pytest.MonkeyPatch
+    installation,
+    installation_steps,
+    progress_updater,
+    monkeypatch: pytest.MonkeyPatch,
+    cancel_before: bool,
 ) -> None:
     from install_interface.data.installation_process_data import ProcessState
 
-    def cancel_after_step(step) -> None:
+    installation._install_process.cancel = cancel_before
+
+    def cancel_after_step(step):
         installation._install_process.cancel = True
 
     run_step = Mock(side_effect=cancel_after_step)
@@ -103,11 +108,15 @@ def test_install_steps_cancellation(
 
     installation.run()
 
-    run_step.assert_called_once_with(installation_steps[0])
     assert installation._install_process.state == ProcessState.canceled
     assert installation._install_process.progress == 100
-    progress_updater.return_value.start.assert_called()
-    progress_updater.return_value.finish.assert_called()
+    if cancel_before:
+        run_step.assert_not_called()
+        progress_updater.assert_not_called()
+    else:
+        run_step.assert_called_once_with(installation_steps[0])
+        progress_updater.return_value.start.assert_called()
+        progress_updater.return_value.finish.assert_called()
 
 
 def test_install_steps_failure(
@@ -131,92 +140,62 @@ def test_install_steps_failure(
 @pytest.fixture
 def flasher(installation, monkeypatch: pytest.MonkeyPatch):
     module = sys.modules[type(installation).__module__]
-    process = Mock(returncode=0)
-    process.communicate.return_value = (b"Flash completed", b"")
-    startup_info = SimpleNamespace(dwFlags=0, wShowWindow=0)
-    start_process = Mock(return_value=process)
-    process_api = SimpleNamespace(
-        STARTUPINFO=Mock(return_value=startup_info),
-        STARTF_USESHOWWINDOW=1,
-        SW_HIDE=0,
-        PIPE=subprocess.PIPE,
-        Popen=start_process,
-        SubprocessError=subprocess.SubprocessError,
-        CalledProcessError=subprocess.CalledProcessError,
-    )
+    download = Mock()
+    factory = Mock(return_value=Mock(download=download))
     connector = Mock()
-    monkeypatch.setattr(module, "subprocess", process_api)
+    read_firmware = Mock(return_value=(0x08000000, b"abcd"))
+    monkeypatch.setattr(module, "ELF32FileReader", Mock(return_value=Mock(read=read_firmware)))
+    monkeypatch.setattr(module, "STM32Bootloader", factory)
     monkeypatch.setattr(module, "AlcotestOneConnectorSerial", Mock(return_value=connector))
-    installation._firmware_started = False
     return SimpleNamespace(
-        process=process,
-        start_process=start_process,
-        startup_info=startup_info,
-        connector=connector,
+        download=download, factory=factory, connector=connector, read_firmware=read_firmware
     )
 
 
-def test_run_install_step_success(installation, installation_steps, flasher, caplog) -> None:
+def test_run_install_step_success(installation, installation_steps, flasher) -> None:
     step = installation_steps[0]
 
-    def communicate(*, timeout):
+    def download(address, data, timeout):
         assert timeout > 0
         assert installation._install_process.is_cancelable is False
-        return b"Flash completed", b""
 
-    flasher.process.communicate.side_effect = communicate
-    with caplog.at_level("DEBUG"):
-        result = installation._run_install_step(step)
+    flasher.download.side_effect = download
+
+    result = installation._run_install_step(step)
 
     assert result is None
-    flasher.start_process.assert_called_once_with(
-        f'{installation.get_flasher_exe_path()} -c port="COM3" -rdu -e all '
-        f'-d "{step.software_package}" -v -s',
-        stderr=subprocess.PIPE,
-        stdout=subprocess.PIPE,
-        startupinfo=flasher.startup_info,
-    )
-    assert flasher.startup_info.dwFlags & 1
-    assert flasher.startup_info.wShowWindow == 0
+    flasher.read_firmware.assert_called_with(step.software_package)
+    flasher.factory.assert_called_with("COM3")
+    flasher.download.assert_called_once_with(0x08000000, b"abcd", step.timeout_duration)
     flasher.connector.assert_has_calls(
         [call.setup(), call.put("/service/startUpdate"), call.teardown()]
     )
-    flasher.process.kill.assert_not_called()
     assert installation._install_process.is_cancelable is True
-    assert "Flash completed" in caplog.text
+    assert installation._firmware_started is True
 
 
-def test_run_install_step_failure(installation, installation_steps, flasher, caplog) -> None:
-    step = installation_steps[0]
-    flasher.process.returncode = 2
-    flasher.process.communicate.return_value = (b"Flash output", b"Flash failed")
+def test_run_install_step_failure(installation, installation_steps, flasher) -> None:
+    error = RuntimeError("Firmware download failed")
+    flasher.download.side_effect = error
 
-    with pytest.raises(subprocess.CalledProcessError) as failure:
-        installation._run_install_step(step)
+    with pytest.raises(RuntimeError) as failure:
+        installation._run_install_step(installation_steps[0])
 
-    assert failure.value.returncode == 2
-    assert failure.value.cmd == flasher.start_process.call_args.args[0]
-    flasher.process.assert_has_calls(
-        [call.communicate(timeout=ANY), call.kill(), call.communicate()]
-    )
+    assert failure.value is error
     assert installation._install_process.is_cancelable is True
-    assert "Flash failed" in caplog.text
+    assert installation._firmware_started is False
 
 
-def test_run_install_step_timeout(installation, installation_steps, flasher, caplog) -> None:
-    step = installation_steps[0]
-    timeout = subprocess.TimeoutExpired("flasher.exe", step.timeout_duration)
-    flasher.process.communicate.side_effect = [timeout, (b"Flash output", b"Flash timed out")]
+def test_run_install_step_timeout(installation, installation_steps, flasher) -> None:
+    error = TimeoutError("Firmware download timed out")
+    flasher.download.side_effect = error
 
-    with pytest.raises(subprocess.TimeoutExpired) as failure:
-        installation._run_install_step(step)
+    with pytest.raises(TimeoutError) as failure:
+        installation._run_install_step(installation_steps[0])
 
-    assert failure.value is timeout
-    flasher.process.assert_has_calls(
-        [call.communicate(timeout=ANY), call.kill(), call.communicate()]
-    )
+    assert failure.value is error
     assert installation._install_process.is_cancelable is True
-    assert "Flash timed out" in caplog.text
+    assert installation._firmware_started is False
 
 
 @pytest.mark.parametrize(
@@ -226,43 +205,17 @@ def test_find_device_ids(installation, component_type, expected_ids) -> None:
     assert installation._find_device_ids_by_component_type(component_type) == expected_ids
 
 
-@pytest.mark.parametrize("error_type", [OSError, subprocess.SubprocessError])
-def test_process_start_error_restores_cancellation(
-    installation, installation_steps, flasher, error_type
-) -> None:
-    error = error_type("Cannot start the flasher")
-    flasher.start_process.side_effect = error
+def test_connection_error_restores_cancellation(installation, installation_steps, flasher) -> None:
+    error = OSError("Cannot open the port")
+    flasher.factory.side_effect = error
 
-    with pytest.raises(error_type) as failure:
+    with pytest.raises(OSError) as failure:
         installation._run_install_step(installation_steps[0])
 
     assert failure.value is error
-    flasher.process.communicate.assert_not_called()
-    flasher.process.kill.assert_not_called()
+    flasher.download.assert_not_called()
     assert installation._install_process.is_cancelable is True
-
-
-@pytest.mark.parametrize("failed_stream", ["stdout", "stderr"])
-def test_logging_error_does_not_stop_output_logging(installation, caplog, failed_stream) -> None:
-    def log_output(message):
-        if message == ("Flash output" if failed_stream == "stdout" else "Flash error"):
-            raise RuntimeError("Logger unavailable")
-
-    logmethod = Mock(side_effect=log_output)
-
-    installation._log_installation_output(b"Flash output", b"Flash error", logmethod)
-
-    logmethod.assert_has_calls([call("Flash output"), call("Flash error")], any_order=True)
-    assert failed_stream in caplog.text
-    assert "Logger unavailable" in caplog.text
-
-
-def test_output_logging_replaces_invalid_utf8(installation) -> None:
-    logmethod = Mock()
-
-    installation._log_installation_output(b"\xff", b"", logmethod)
-
-    logmethod.assert_has_calls([call("\ufffd"), call("")], any_order=True)
+    assert installation._firmware_started is False
 
 
 @pytest.mark.parametrize(
@@ -290,20 +243,27 @@ def test_run_install_step_selects_start_mode(
         flasher.connector.setup.assert_not_called()
         flasher.connector.put.assert_not_called()
         flasher.connector.teardown.assert_not_called()
-    flasher.process.communicate.assert_called()
+    flasher.download.assert_called()
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason="Firmware state is not updated.")
 def test_bootloader_download_restarts_application_for_next_step(
     installation, installation_steps, flasher, progress_updater
 ) -> None:
     installation._target_information.software_version = "bootloader"
+    events = Mock()
+    events.attach_mock(flasher.download, "download")
+    events.attach_mock(flasher.connector.put, "put")
 
     installation.run()
 
     assert installation._install_process.state == ProcessState.success
-    assert flasher.start_process.call_count == len(installation_steps)
-    flasher.connector.put.assert_any_call("/service/startUpdate")
+    events.assert_has_calls(
+        [
+            call.download(ANY, ANY, ANY),
+            call.put("/service/startUpdate"),
+            call.download(ANY, ANY, ANY),
+        ]
+    )
 
 
 @pytest.mark.skip(reason="Hardware version detection not implemented")

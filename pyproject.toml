@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "xplore-installer"
-version = "0.4.0"
+version = "0.5.0"
 description = "Installation support for Dräger X-plore 8300 in Service Connect"
 readme = "README.md"
 requires-python = ">=3.11"
