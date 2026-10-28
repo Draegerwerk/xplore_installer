@@ -1,16 +1,20 @@
 import logging
-import os
 import subprocess
 import traceback
+from datetime import UTC, datetime
 
+from aoneconnector.aone_connector import AlcotestOneConnectorSerial
 from install_interface.data.installation_process_data import ProcessState
 from install_interface.interface.base_installation import BaseInstallation
 from install_interface.tools.progress_updater import ProgressStepUpdater
 
 import xplore_installer
-from xplore_installer.xplore8300_installer_constants import XPLORE8300_DEVICE_TYPE_BIN, END_PROGRESS, FLASHER_EXE_PATH
-
-from aoneconnector.aone_connector import AlcotestOneConnectorSerial
+from xplore_installer.xplore8300_installer_constants import (
+    END_PROGRESS,
+    FLASHER_EXE_PATH,
+    TIME_ADDRESS,
+    XPLORE8300_DEVICE_TYPE_BIN,
+)
 
 logger = logging.getLogger(f'{xplore_installer.library_name}.Xplore8300Installation')
 
@@ -53,6 +57,10 @@ class Xplore8300Installation(BaseInstallation):
                 step_end_progress += step_progress
                 progress_updater.finish()
         else:
+            try:
+                self._set_device_rtc_to_host_time()
+            except Exception as error:
+                logger.warning("Could not set device RTC: %s", error)
             self._install_process.info_message = "Update finished successfully."
             self._install_process.state = ProcessState.success
 
@@ -64,6 +72,19 @@ class Xplore8300Installation(BaseInstallation):
             if component == component_type:
                 device_ids_by_component_type.append(components_types[component])
         return device_ids_by_component_type
+
+    def _set_device_rtc_to_host_time(self) -> None:
+        """Set the RTC to the host UTC time, with zero fractions of a second."""
+        now = datetime.now(UTC)
+        utc_timestamp = f"{now:%Y-%m-%dT%H:%M:%S}.00Z"
+        com_port = self._target_information.connection_information
+        xplore_connector = AlcotestOneConnectorSerial({"comport": com_port})
+        xplore_connector.setup()
+        try:
+            logger.info("Setting device RTC to %s", utc_timestamp)
+            xplore_connector.put(TIME_ADDRESS, utc=utc_timestamp)
+        finally:
+            xplore_connector.teardown()
 
     def _run_install_step(self, install_step):
         """
