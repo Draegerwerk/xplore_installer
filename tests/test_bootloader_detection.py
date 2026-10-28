@@ -4,7 +4,7 @@ from unittest.mock import Mock, call
 
 import pytest
 
-from tests.install_interface_mocks import NotApplicable, TargetInformationData
+from tests.install_interface_mocks import LoadDeviceInformationError, TargetInformationData
 from tests.test_install_lib_contract import installer_library as installer_library
 from tests.test_install_lib_contract import target_connector as target_connector
 from tests.test_stm32_bootloader import serial_port as serial_port
@@ -86,7 +86,7 @@ def test_get_target_information_rejects_device_when_neither_protocol_responds(
 ) -> None:
     target_connector.connection.get.side_effect = TimeoutError("No CoAP reply")
 
-    with pytest.raises(NotApplicable):
+    with pytest.raises(LoadDeviceInformationError):
         installer_library.get_target_information("COM3")
 
     bootloader.probe.assert_called()
