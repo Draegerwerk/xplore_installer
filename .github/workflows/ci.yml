@@ -23,18 +23,10 @@ jobs:
           python-version: '3.11'
           cache: pip
       - run: python -m pip install ".[dev]"
-      - name: Lint with temporary legacy exclusions
-        run: >-
-          ruff check .
-          --extend-exclude src/xplore_installer/xplore8300_install_lib.py
-          --extend-exclude src/xplore_installer/xplore8300_installation.py
-          --extend-exclude src/xplore_installer/xplore8300_installer_constants.py
-      - name: Check format with temporary legacy exclusions
-        run: >-
-          ruff format --check .
-          --extend-exclude src/xplore_installer/xplore8300_install_lib.py
-          --extend-exclude src/xplore_installer/xplore8300_installation.py
-          --extend-exclude src/xplore_installer/xplore8300_installer_constants.py
+      - name: Lint
+        run: ruff check .
+      - name: Check format
+        run: ruff format --check .
 
   test:
     name: Test (${{ matrix.os }}, Python ${{ matrix.python }})
@@ -59,7 +51,7 @@ jobs:
       - name: Install built wheel
         shell: bash
         run: python -m pip install --force-reinstall --no-deps dist/*.whl
-      - name: Test with temporary legacy coverage threshold
+      - name: Run tests
         run: python -m pytest
       - uses: actions/upload-artifact@v7
         if: always()

@@ -1,6 +1,5 @@
 import logging
 import os
-from typing import List
 
 from aoneconnector.aone_connector import AlcotestOneConnectorSerial, force_single_event_loop
 from install_interface.data.installation_file_data import InstallationFileData
@@ -36,13 +35,7 @@ from xplore_installer.xplore8300_installer_constants import (
     XPLORE8300_DEVICE_TYPE_BIN,
 )
 
-logger = logging.getLogger(f'{xplore_installer.library_name}.Xplore8300InstallLib')
-
-
-# def _read_cert_data()->CertificateData:
-#     cert_store = CertificateStore(cert_store_definitions.PURPOSES.STANDARD_TECHNICIAN_DEVICE_CERTIFICATE)
-#     pub, priv, pw = cert_store.get()
-#     return CertificateData(pathlib.Path(pub).read_text(encoding="utf8"), pathlib.Path(priv).read_text(encoding="utf8"), pw)
+logger = logging.getLogger(f"{xplore_installer.library_name}.Xplore8300InstallLib")
 
 
 class Xplore8300InstallLib(BaseInstallerInterface):
@@ -63,7 +56,7 @@ class Xplore8300InstallLib(BaseInstallerInterface):
         force_single_event_loop()
 
     @property
-    def firmware_file_extensions(self) -> List[str]:
+    def firmware_file_extensions(self) -> list[str]:
         return [LIBRARY_FILE_EXTENSION]
 
     def load_file(self, path: str) -> InstallationFileData:
@@ -181,8 +174,9 @@ class Xplore8300InstallLib(BaseInstallerInterface):
         )
 
     @ensure_correct_library_decorator
-    def start_installation(self, install_data: InstallationInstructionData,
-                           target_data: TargetInformationData) -> InstallationProcessData:
+    def start_installation(
+        self, install_data: InstallationInstructionData, target_data: TargetInformationData
+    ) -> InstallationProcessData:
         """
         Start Xplore8300 update process.
 

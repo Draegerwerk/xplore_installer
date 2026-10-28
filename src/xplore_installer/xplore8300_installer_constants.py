@@ -1,8 +1,5 @@
 SW_VERSION_ADDRESS = "/service/fwVersion"
 SW_VERSION_KEY = "fw_version"
-SW_VERSION_KEY_MAJOR = 'major'
-SW_VERSION_KEY_MINOR = 'minor'
-SW_VERSION_KEY_PATCH = 'patch'
 SERIAL_NUMBER_ADDRESS = "/service/serialNumber"
 SW_UPDATE_START_ADDRESS = "/service/startUpdate"
 TIME_ADDRESS = "/service/time"
@@ -11,9 +8,6 @@ DEVICE_BIN_ADDRESS = "/serivce/deviceId"
 DEVICE_BIN_KEY = "device_id"
 LIBRARY_FILE_EXTENSION = ".ipex"
 XPLORE8300_DEVICE_TYPE_BIN = "2776"
-ALCOTEST7000_DEVICE_TYPE_BIN = "2297" # DCA: Remove
-ALCOTEST7000_MED_DEVICE_TYPE_BIN = "2317" # DCA: Remove
-INSTALLATION_NAME = "Xplore8300 Update"
 
 END_PROGRESS = 100
 

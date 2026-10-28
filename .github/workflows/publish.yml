@@ -45,7 +45,7 @@ jobs:
       - run: python -m build
       - run: python -m twine check --strict dist/*
       - run: python -m pip install --force-reinstall --no-deps dist/*.whl
-      - name: Test with temporary legacy coverage threshold
+      - name: Run tests
         run: python -m pytest
       - uses: actions/upload-artifact@v7
         with:

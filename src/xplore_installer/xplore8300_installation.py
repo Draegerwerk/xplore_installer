@@ -13,11 +13,12 @@ from xplore_installer.stm32_bootloader import STM32Bootloader
 from xplore_installer.xplore8300_installer_constants import (
     BOOTLOADER_SW_VERSION,
     END_PROGRESS,
+    SW_UPDATE_START_ADDRESS,
     TIME_ADDRESS,
     XPLORE8300_DEVICE_TYPE_BIN,
 )
 
-logger = logging.getLogger(f'{xplore_installer.library_name}.Xplore8300Installation')
+logger = logging.getLogger(f"{xplore_installer.library_name}.Xplore8300Installation")
 
 
 class Xplore8300Installation(BaseInstallation):
@@ -41,10 +42,14 @@ class Xplore8300Installation(BaseInstallation):
         step_end_progress = step_progress
         for install_step in installation_steps:
             if self._install_process.cancel and self._install_process.is_cancelable:
-                logger.warning('Installation was canceled. Will stop now')
+                logger.warning("Installation was canceled. Will stop now")
                 break
-            logger.info(f'Installing {install_step.software_package} to {install_step.instance_device_id}')
-            progress_updater = ProgressStepUpdater(self._install_process, install_step.expected_duration, step_end_progress)
+            logger.info(
+                f"Installing {install_step.software_package} to {install_step.instance_device_id}"
+            )
+            progress_updater = ProgressStepUpdater(
+                self._install_process, install_step.expected_duration, step_end_progress
+            )
             progress_updater.start()
             try:
                 self._run_install_step(install_step)
@@ -65,7 +70,6 @@ class Xplore8300Installation(BaseInstallation):
             self._install_process.state = ProcessState.success
 
     def _find_device_ids_by_component_type(self, component_type):
-        # components_types = {"A7000": ALCOTEST7000_DEVICE_TYPE_BIN, "A7000 med": ALCOTEST7000_MED_DEVICE_TYPE_BIN}
         components_types = {"Xplore8300": XPLORE8300_DEVICE_TYPE_BIN}
         device_ids_by_component_type = []
         for component in components_types:
@@ -95,7 +99,7 @@ class Xplore8300Installation(BaseInstallation):
         ):
             xplore_connector = AlcotestOneConnectorSerial({"comport": com_port})
             xplore_connector.setup()
-            xplore_connector.put("/service/startUpdate")
+            xplore_connector.put(SW_UPDATE_START_ADDRESS)
             xplore_connector.teardown()
 
         try:
