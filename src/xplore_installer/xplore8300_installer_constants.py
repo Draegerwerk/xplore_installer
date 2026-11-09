@@ -8,6 +8,7 @@ SW_VERSION_KEY_MINOR = 'minor'
 SW_VERSION_KEY_PATCH = 'patch'
 SERIAL_NUMBER_ADDRESS = "/service/serialNumber"
 SW_UPDATE_START_ADDRESS = "/service/startUpdate"
+TIME_ADDRESS = "/service/time"
 SERIAL_NUMBER_KEY = "serial_number"
 DEVICE_BIN_ADDRESS = "/serivce/deviceId"
 DEVICE_BIN_KEY = "device_id"
