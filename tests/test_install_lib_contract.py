@@ -139,7 +139,6 @@ def test_load_file_rejects_unsupported_extension(
         installer_library.load_file(str(unsupported_file))
 
 
-@pytest.mark.xfail(strict=True, reason="Product ID is not checked.")
 def test_load_file_rejects_other_product(installer_library, installation_file: Path) -> None:
     from install_interface.installer_exceptions import NotApplicable
 
@@ -152,7 +151,6 @@ def test_load_file_rejects_other_product(installer_library, installation_file: P
         installer_library.load_file(str(installation_file))
 
 
-@pytest.mark.xfail(strict=True, reason="File errors are not wrapped.")
 def test_load_file_reports_missing_file(installer_library, tmp_path: Path) -> None:
     from install_interface.installer_exceptions import LoadFileError
 
@@ -165,7 +163,6 @@ def test_load_file_reports_missing_file(installer_library, tmp_path: Path) -> No
     ["<ProductSoftwarePackage", "<ProductSoftwarePackage/>"],
     ids=["invalid-xml", "invalid-schema"],
 )
-@pytest.mark.xfail(strict=True, reason="File errors are not wrapped.")
 def test_load_file_reports_invalid_file(
     installer_library, installation_file: Path, content: str
 ) -> None:
@@ -220,7 +217,6 @@ def test_get_target_information_rejects_unsupported_connection(
     target_connector.factory.assert_not_called()
 
 
-@pytest.mark.xfail(strict=True, reason="Device ID is not checked.")
 def test_get_target_information_rejects_other_device(installer_library, target_connector) -> None:
     from install_interface.installer_exceptions import NotApplicable
 
@@ -236,7 +232,6 @@ def test_get_target_information_rejects_other_device(installer_library, target_c
     target_connector.connection.teardown.assert_called()
 
 
-@pytest.mark.xfail(strict=True, reason="Connection errors use NotApplicable.")
 def test_get_target_information_reports_connection_error(
     installer_library, target_connector
 ) -> None:
@@ -251,7 +246,6 @@ def test_get_target_information_reports_connection_error(
 
 
 @pytest.mark.parametrize("read_index", range(3), ids=["serial-number", "version", "device-type"])
-@pytest.mark.xfail(strict=True, reason="Timeouts use NotApplicable.")
 def test_get_target_information_reports_timeout(
     installer_library, target_connector, read_index: int
 ) -> None:
@@ -273,7 +267,6 @@ def test_get_target_information_reports_timeout(
         target_connector.connection.teardown.assert_called()
 
 
-@pytest.mark.xfail(strict=True, reason="Read errors are not wrapped.")
 def test_get_target_information_reports_read_error(installer_library, target_connector) -> None:
     from install_interface.installer_exceptions import LoadDeviceInformationError
 
@@ -286,7 +279,6 @@ def test_get_target_information_reports_read_error(installer_library, target_con
         target_connector.connection.teardown.assert_called()
 
 
-@pytest.mark.xfail(strict=True, reason="Invalid replies are not wrapped.")
 def test_get_target_information_reports_invalid_response(
     installer_library, target_connector
 ) -> None:
