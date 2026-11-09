@@ -149,6 +149,8 @@ class BaseInstallation(Thread):
 
 def load_install_package(path: str):
     root = ElementTree.parse(path).getroot()
+    if not all(root.get(name) for name in ("name", "deviceTypeBin", "productVersion")):
+        raise ElementTree.ParseError("Package attributes are missing.")
     package = Mock(spec=["get", "find", "xpath", "tag"], tag=root.tag)
     package.get.side_effect = root.get
     package.find.side_effect = root.find

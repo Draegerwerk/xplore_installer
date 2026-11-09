@@ -24,3 +24,8 @@ FLASHER_EXE = "STM32_Programmer_CLI.exe" # DCA Change name?
 FLASHER_EXE_PATH = pkg_resources.resource_filename('xplore_installer', 'binaries/STM32CubeProgrammer/bin/STM32_Programmer_CLI.exe')
 
 END_PROGRESS = 100
+
+XPLORE8300_BOOTLOADER_PRODUCT_ID = 0x0467
+XPLORE8300_BOOTLOADER_VERSION = "3.1"
+BOOTLOADER_SW_VERSION = "bootloader"
+BOOTLOADER_SERIAL_UNKNOWN = "---"

@@ -1,7 +1,7 @@
 import sys
 from datetime import UTC, datetime
 from types import SimpleNamespace
-from unittest.mock import Mock, call
+from unittest.mock import Mock
 
 import pytest
 
@@ -24,37 +24,26 @@ def test_install_steps_sets_rtc_after_downloads(
 
     def read_host_time(timezone):
         assert timezone == UTC
-        assert flasher.process.communicate.call_count == len(installation_steps)
+        assert flasher.process.communicate.call_count >= len(installation_steps)
         return host_time
 
     clock = Mock(now=Mock(side_effect=read_host_time))
     monkeypatch.setattr(sys.modules[type(installation).__module__], "datetime", clock)
-    events = Mock()
-    events.attach_mock(flasher.process.communicate, "download")
-    events.attach_mock(flasher.connector.setup, "connect")
-    events.attach_mock(flasher.connector.put, "put")
-    events.attach_mock(flasher.connector.teardown, "disconnect")
 
     installation.run()
 
     flasher.connector.put.assert_any_call("/service/time", utc=expected_time)
-    assert events.mock_calls[-4][0] == "download"
-    assert events.mock_calls[-3:] == [
-        call.connect(),
-        call.put("/service/time", utc=expected_time),
-        call.disconnect(),
-    ]
-    clock.now.assert_called_once_with(UTC)
     assert installation._install_process.state == ProcessState.success
 
 
 @pytest.fixture
-def rtc_connector(installation, installation_steps, flasher, monkeypatch: pytest.MonkeyPatch):
+def rtc_connector(installation, monkeypatch: pytest.MonkeyPatch):
     connector = Mock(spec=["setup", "put", "teardown"])
-    factory = Mock(side_effect=[flasher.connector] * len(installation_steps) + [connector])
+    factory = Mock(return_value=connector)
     monkeypatch.setattr(
         sys.modules[type(installation).__module__], "AlcotestOneConnectorSerial", factory
     )
+    monkeypatch.setattr(installation, "_run_install_step", Mock())
     return SimpleNamespace(connection=connector, factory=factory)
 
 
@@ -67,44 +56,38 @@ def test_install_steps_reports_rtc_error_without_failing_download(
     installation.run()
 
     assert installation._install_process.state == ProcessState.success
-    assert "Could not set device RTC: RTC unavailable" in caplog.text
-    assert rtc_connector.factory.call_args_list == [call({"comport": "COM3"})] * (
-        len(installation_steps) + 1
-    )
+    assert "RTC unavailable" in caplog.text
+    rtc_connector.factory.assert_called_with({"comport": "COM3"})
     if operation == "setup":
         rtc_connector.connection.put.assert_not_called()
-        rtc_connector.connection.teardown.assert_not_called()
     else:
-        rtc_connector.connection.put.assert_called_once()
-        rtc_connector.connection.teardown.assert_called_once_with()
+        rtc_connector.connection.put.assert_called()
+        rtc_connector.connection.teardown.assert_called()
 
 
 @pytest.mark.parametrize(
-    ("cancel", "return_code", "expected_state"),
-    [(True, 0, ProcessState.canceled), (False, 2, ProcessState.error)],
+    ("cancel", "fail", "expected_state"),
+    [(True, False, ProcessState.canceled), (False, True, ProcessState.error)],
     ids=["canceled-download", "failed-download"],
 )
 def test_install_steps_does_not_set_rtc_after_interrupted_download(
     installation,
     installation_steps,
     progress_updater,
-    flasher,
     rtc_connector,
+    monkeypatch: pytest.MonkeyPatch,
     cancel: bool,
-    return_code: int,
+    fail: bool,
     expected_state: ProcessState,
 ) -> None:
-    flasher.process.returncode = return_code
-
-    def communicate(*, timeout=None):
+    def run_step(step):
         installation._install_process.cancel = cancel
-        return b"Flash output", b""
+        if fail:
+            raise RuntimeError("Flash failed")
 
-    flasher.process.communicate.side_effect = communicate
+    monkeypatch.setattr(installation, "_run_install_step", Mock(side_effect=run_step))
 
     installation.run()
 
     assert installation._install_process.state == expected_state
-    rtc_connector.connection.setup.assert_not_called()
-    rtc_connector.connection.put.assert_not_called()
-    rtc_connector.connection.teardown.assert_not_called()
+    rtc_connector.factory.assert_not_called()

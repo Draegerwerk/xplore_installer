@@ -10,6 +10,7 @@ from install_interface.tools.progress_updater import ProgressStepUpdater
 
 import xplore_installer
 from xplore_installer.xplore8300_installer_constants import (
+    BOOTLOADER_SW_VERSION,
     END_PROGRESS,
     FLASHER_EXE_PATH,
     TIME_ADDRESS,
@@ -100,10 +101,13 @@ class Xplore8300Installation(BaseInstallation):
         # DCA: original command: install_cmd = f'{self.get_flasher_exe_path()} "{install_step.software_package}" {install_step.parameters}'
         # DCA: COM port of the intended device needs to be communicated to the exe here. Is this correct?
         com_port = self._target_information.connection_information
-        xplore_connector = AlcotestOneConnectorSerial({"comport":com_port})
-        xplore_connector.setup()
-        xplore_connector.put("service/startUpdate")
-        xplore_connector.teardown()
+        if self._firmware_started or not str(self._target_information.software_version).startswith(
+            BOOTLOADER_SW_VERSION
+        ):
+            xplore_connector = AlcotestOneConnectorSerial({"comport": com_port})
+            xplore_connector.setup()
+            xplore_connector.put("/service/startUpdate")
+            xplore_connector.teardown()
 
         install_cmd = f'{self.get_flasher_exe_path()} -c port="{com_port}" -rdu -e all -d "{install_step.software_package}" -v -s'
         try:
