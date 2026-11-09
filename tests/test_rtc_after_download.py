@@ -24,7 +24,7 @@ def test_install_steps_sets_rtc_after_downloads(
 
     def read_host_time(timezone):
         assert timezone == UTC
-        assert flasher.process.communicate.call_count >= len(installation_steps)
+        assert flasher.download.call_count >= len(installation_steps)
         return host_time
 
     clock = Mock(now=Mock(side_effect=read_host_time))

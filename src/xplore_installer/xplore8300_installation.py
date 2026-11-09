@@ -1,5 +1,4 @@
 import logging
-import subprocess
 import traceback
 from datetime import UTC, datetime
 
@@ -9,10 +8,11 @@ from install_interface.interface.base_installation import BaseInstallation
 from install_interface.tools.progress_updater import ProgressStepUpdater
 
 import xplore_installer
+from xplore_installer.elf32_reader import ELF32FileReader
+from xplore_installer.stm32_bootloader import STM32Bootloader
 from xplore_installer.xplore8300_installer_constants import (
     BOOTLOADER_SW_VERSION,
     END_PROGRESS,
-    FLASHER_EXE_PATH,
     TIME_ADDRESS,
     XPLORE8300_DEVICE_TYPE_BIN,
 )
@@ -28,11 +28,10 @@ class Xplore8300Installation(BaseInstallation):
         threading (Thread): thread
     """
 
-    def get_flasher_exe_path(self) -> str:
-        return FLASHER_EXE_PATH
+    _firmware_started = False
 
     def _setup(self):
-        pass
+        self._firmware_started = False
 
     def _teardown(self):
         pass
@@ -88,18 +87,8 @@ class Xplore8300Installation(BaseInstallation):
             xplore_connector.teardown()
 
     def _run_install_step(self, install_step):
-        """
-        Runs the Xplore8300 update process given by 'cmd' in a hidden process window.
-
-        Args:
-            install_step (InstallStep): install step to be run on device
-        """
-        startupinfo = subprocess.STARTUPINFO()
-        startupinfo.dwFlags = subprocess.STARTF_USESHOWWINDOW
-        startupinfo.wShowWindow = subprocess.SW_HIDE
-        process = None
-        # DCA: original command: install_cmd = f'{self.get_flasher_exe_path()} "{install_step.software_package}" {install_step.parameters}'
-        # DCA: COM port of the intended device needs to be communicated to the exe here. Is this correct?
+        """Download firmware. Disable cancellation while the flash is written."""
+        base_address, data = ELF32FileReader().read(install_step.software_package)
         com_port = self._target_information.connection_information
         if self._firmware_started or not str(self._target_information.software_version).startswith(
             BOOTLOADER_SW_VERSION
@@ -109,34 +98,9 @@ class Xplore8300Installation(BaseInstallation):
             xplore_connector.put("/service/startUpdate")
             xplore_connector.teardown()
 
-        install_cmd = f'{self.get_flasher_exe_path()} -c port="{com_port}" -rdu -e all -d "{install_step.software_package}" -v -s'
         try:
             self._install_process.is_cancelable = False
-            process = subprocess.Popen(install_cmd, stderr=subprocess.PIPE, stdout=subprocess.PIPE, startupinfo=startupinfo)
-            out, err = process.communicate(timeout=install_step.timeout_duration)
-            if process.returncode:
-                raise subprocess.CalledProcessError(process.returncode, install_cmd)
-        except subprocess.SubprocessError:
-            if process:
-                process.kill()
-                out, err = process.communicate()
-                self._log_installation_output(out, err, logger.error)
-            raise
-        else:
-            self._log_installation_output(out, err, logger.debug)
+            STM32Bootloader(com_port).download(base_address, data, install_step.timeout_duration)
+            self._firmware_started = True
         finally:
             self._install_process.is_cancelable = True
-
-    @staticmethod
-    def _log_installation_output(stdout: bytes, stderr: bytes, logmethod) -> None:
-        """
-        Method logs installation output and fails gracefully if this is not possible
-        """
-        try:
-            logmethod(stdout.decode(errors='replace'))
-        except Exception as e:  # pragma: no cover - logging failure
-            logger.warning(f'Could not log stdout. Exception: {e}')
-        try:
-            logmethod(stderr.decode(errors='replace'))
-        except Exception as e:  # pragma: no cover - logging failure
-            logger.warning(f'Could not log stderr. Exception: {e}')
